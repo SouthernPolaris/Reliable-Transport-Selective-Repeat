@@ -60,6 +60,8 @@ static struct pkt buffer[WINDOWSIZE];  /* array for storing packets waiting for 
 static int windowfirst, windowlast;    /* array indexes of the first/last packet awaiting ACK */
 static int windowcount;                /* the number of packets currently awaiting an ACK */
 static int A_nextseqnum;               /* the next sequence number to be used by the sender */
+static bool isAcked[WINDOWSIZE];
+
 
 /* called from layer 5 (application layer), passed the message to be sent to other side */
 void A_output(struct msg message)
@@ -81,7 +83,8 @@ void A_output(struct msg message)
 
     /* put packet in window buffer */
     /* windowlast will always be 0 for alternating bit; but not for GoBackN */
-    windowlast = (windowlast + 1) % WINDOWSIZE; 
+    windowlast = (windowlast + 1) % WINDOWSIZE;
+    isAcked[windowlast] = false;
     buffer[windowlast] = sendpkt;
     windowcount++;
 
@@ -187,6 +190,7 @@ void A_timerinterrupt(void)
 /* entity A routines are called. You can use it to do any initialization */
 void A_init(void)
 {
+  int i;
   /* initialise A's window, buffer and sequence number */
   A_nextseqnum = 0;  /* A starts with seq num 0, do not change this */
   windowfirst = 0;
@@ -195,6 +199,11 @@ void A_init(void)
 		     so initially this is set to -1
 		   */
   windowcount = 0;
+
+
+  for (i = 0; i < WINDOWSIZE; i++) {
+    isAcked[i] = false;
+  }
 }
 
 
