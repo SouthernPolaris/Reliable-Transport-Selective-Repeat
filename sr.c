@@ -26,6 +26,7 @@
 #define WINDOWSIZE 6    /* the maximum number of buffered unacked packet */
 #define SEQSPACE 7      /* the min sequence space for GBN must be at least windowsize + 1 */
 #define NOTINUSE (-1)   /* used to fill header fields that are not being used */
+#define WINDOWFULLBUFFERSIZE 100
 
 /* generic procedure to compute the checksum of a packet.  Used by both sender and receiver  
    the simulator will overwrite part of your packet with 'z's.  It will not overwrite your 
@@ -61,7 +62,9 @@ static int windowfirst, windowlast;    /* array indexes of the first/last packet
 static int windowcount;                /* the number of packets currently awaiting an ACK */
 static int A_nextseqnum;               /* the next sequence number to be used by the sender */
 static bool isAcked[WINDOWSIZE];
-
+static struct msg window_full_buffer[WINDOWFULLBUFFERSIZE];
+static int bufferfirst, bufferlast;
+static int buffercount;
 
 /* called from layer 5 (application layer), passed the message to be sent to other side */
 void A_output(struct msg message)
@@ -200,6 +203,9 @@ void A_init(void)
 		   */
   windowcount = 0;
 
+  bufferfirst = 0;
+  bufferlast = -1;
+  buffercount = 0;
 
   for (i = 0; i < WINDOWSIZE; i++) {
     isAcked[i] = false;
