@@ -107,10 +107,19 @@ void A_output(struct msg message)
   else {
     if (TRACE > 0)
       printf("----A: New message arrives, send window is full\n");
-    window_full++;
+
+    if (buffercount < WINDOWFULLBUFFERSIZE) {
+      window_full_buffer[bufferlast] = message;
+      bufferlast = (bufferlast + 1) % WINDOWFULLBUFFERSIZE;
+      buffercount++;
+    } else {
+      if (TRACE > 0) {
+        printf("----A: Buffer and window full\n");
+      }
+      window_full++;
+    }
   }
 }
-
 
 /* called from layer 3, when a packet arrives for layer 4 
    In this practical this will always be an ACK as B never sends data.
