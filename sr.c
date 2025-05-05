@@ -125,6 +125,9 @@ void A_input(struct pkt packet)
   }
 
   total_ACKs_received += 1;
+  if (TRACE > 0) {
+    printf("----A: uncorrupted ACK %d is received\n",packet.acknum);
+  }
 
   if (!is_within_window(packet.acknum, windowfirst, A_nextseqnum)) {
     return;
@@ -136,9 +139,13 @@ void A_input(struct pkt packet)
     }
     return;
   }
-
+   
   new_ACKs++;
-
+  
+  if (TRACE > 0) {
+    printf("----A: ACK %d is not a duplicate\n", packet.acknum);
+  }
+  
   isAcked[packet.acknum] = true;
 
   if (packet.acknum == windowfirst) {
@@ -160,10 +167,13 @@ void A_input(struct pkt packet)
 void A_timerinterrupt(void)
 {
   struct pkt send_pkt;
+  
+  send_pkt = buffer[windowfirst];
+
   if (TRACE > 0)
     printf("----A: time out,resend packets!\n");
+    printf("---A: resending packet %d\n", (send_pkt.seqnum));
 
-  send_pkt = buffer[windowfirst];
   /* Singular packet sending only instead of GBN's for loop as sends packets individually instead of all after */
   tolayer3(A, send_pkt);
   packets_resent++;
