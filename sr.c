@@ -117,9 +117,6 @@ bool is_within_window(int seqnum, int start, int end) {
 */
 void A_input(struct pkt packet)
 {
-  int ackcount = 0;
-  int i;
-
   if (IsCorrupted(packet)) {
     if (TRACE > 0) {
       printf("----A: corrupted ACK is received, do nothing!\n");
@@ -154,8 +151,6 @@ void A_input(struct pkt packet)
 
     if (windowfirst != A_nextseqnum) {
       starttimer(A, RTT);
-    } else {
-      stoptimer(A);
     }
   }
 
@@ -164,10 +159,11 @@ void A_input(struct pkt packet)
 /* called when A's timer goes off */
 void A_timerinterrupt(void)
 {
+  struct pkt send_pkt;
   if (TRACE > 0)
     printf("----A: time out,resend packets!\n");
 
-  struct pkt send_pkt = buffer[windowfirst];
+  send_pkt = buffer[windowfirst];
   /* Singular packet sending only instead of GBN's for loop as sends packets individually instead of all after */
   tolayer3(A, send_pkt);
   packets_resent++;
@@ -202,7 +198,7 @@ static int buffer_B_start;
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 void B_input(struct pkt packet)
 {
-  struct pkt sendpkt;
+  struct pkt buffer_pkt;
   int i;
 
   bool currWindow = false;
@@ -228,35 +224,29 @@ void B_input(struct pkt packet)
     packet_return.seqnum = NOTINUSE;
     packet_return.acknum = packet.seqnum;
 
-    /* Fill payload with 0s */
     for (i = 0; i < 20; i++) {
-      packet_return.payload[i] = '0';
+      packet_return.payload[i] = 'A';
     }
     packet_return.checksum = ComputeChecksum(packet_return);
 
     tolayer3(B, packet_return);
 
-    struct pkt buffer_pkt = buffer_B_side[packet.seqnum];
+    buffer_pkt = buffer_B_side[packet.seqnum];
 
     if (buffer_pkt.seqnum == NOTINUSE) {
       buffer_B_side[packet.seqnum] = packet;
     }
 
-    struct pkt temp_pkt = buffer_B_side[buffer_B_start];
-
-    while (temp_pkt.seqnum != NOTINUSE) {
-      tolayer5(B, temp_pkt.payload);
+    while (buffer_B_side[buffer_B_start].seqnum != NOTINUSE) {
+      tolayer5(B, buffer_B_side[buffer_B_start].payload);
       buffer_B_side[buffer_B_start].seqnum = NOTINUSE;
   
       /* Slide the window forward */
       buffer_B_start = (buffer_B_start + 1) % SEQSPACE;
-      temp_pkt = buffer_B_side[buffer_B_start];
-    }
+  }
     return;
   }
 
-
-  /* Check if the packet is in the previous window as per the course reading and send if so */
   prevWindow = is_within_window(packet.seqnum, prevLeft, prevRight);
 
   if (prevWindow) {
@@ -270,7 +260,6 @@ void B_input(struct pkt packet)
     tolayer3(B, prev_buffer_pkt);
   }
 }
-
 /* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 void B_init(void)
