@@ -170,9 +170,10 @@ void A_timerinterrupt(void)
   
   send_pkt = buffer[windowfirst];
 
-  if (TRACE > 0)
+  if (TRACE > 0) {
     printf("----A: time out,resend packets!\n");
     printf("---A: resending packet %d\n", (send_pkt.seqnum));
+  }
 
   /* Singular packet sending only instead of GBN's for loop as sends packets individually instead of all after */
   tolayer3(A, send_pkt);
