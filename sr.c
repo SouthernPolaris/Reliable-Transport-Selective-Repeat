@@ -158,8 +158,6 @@ void A_input(struct pkt packet)
 
     if (windowfirst != A_nextseqnum) {
       starttimer(A, RTT);
-    } else {
-      stoptimer(A);
     }
   }
 
