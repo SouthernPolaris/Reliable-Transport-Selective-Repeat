@@ -105,53 +105,6 @@ void A_output(struct msg message)
     }
     window_full++;
   }
-
-  // if ( windowcount < WINDOWSIZE) {
-  //   if (TRACE > 1)
-  //     printf("----A: New message arrives, send window is not full, send new messge to layer3!\n");
-
-  //   /* create packet */
-  //   sendpkt.seqnum = A_nextseqnum;
-  //   sendpkt.acknum = NOTINUSE;
-  //   for ( i=0; i<20 ; i++ ) 
-  //     sendpkt.payload[i] = message.data[i];
-  //   sendpkt.checksum = ComputeChecksum(sendpkt); 
-
-  //   /* put packet in window buffer */
-  //   /* windowlast will always be 0 for alternating bit; but not for GoBackN */
-  //   windowlast = (windowlast + 1) % WINDOWSIZE;
-  //   isAcked[windowlast] = false;
-  //   buffer[windowlast] = sendpkt;
-  //   windowcount++;
-
-  //   /* send out packet */
-  //   if (TRACE > 0)
-  //     printf("Sending packet %d to layer 3\n", sendpkt.seqnum);
-  //   tolayer3 (A, sendpkt);
-
-  //   /* start timer if first packet in window */
-  //   if (windowcount == 1)
-  //     starttimer(A,RTT);
-
-  //   /* get next sequence number, wrap back to 0 */
-  //   A_nextseqnum = (A_nextseqnum + 1) % SEQSPACE;  
-  // }
-  // /* if blocked,  window is full */
-  // else {
-  //   if (TRACE > 0)
-  //     printf("----A: New message arrives, send window is full\n");
-
-  //   if (buffercount < WINDOWFULLBUFFERSIZE) {
-  //     window_full_buffer[bufferlast] = message;
-  //     bufferlast = (bufferlast + 1) % WINDOWFULLBUFFERSIZE;
-  //     buffercount++;
-  //   } else {
-  //     if (TRACE > 0) {
-  //       printf("----A: Buffer and window full\n");
-  //     }
-  //     window_full++;
-  //   }
-  // }
 }
 
 /* called from layer 3, when a packet arrives for layer 4 
