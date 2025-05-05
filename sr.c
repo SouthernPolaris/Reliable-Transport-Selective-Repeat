@@ -151,13 +151,15 @@ void A_input(struct pkt packet)
   if (packet.acknum == windowfirst) {
     stoptimer(A);
 
-    while (windowfirst != A_nextseqnum && isAcked[windowfirst] == true) {
+    while (windowfirst != A_nextseqnum && isAcked[windowfirst]) {
       isAcked[windowfirst] = false;
       windowfirst = (windowfirst + 1) % SEQSPACE;
     }
 
     if (windowfirst != A_nextseqnum) {
       starttimer(A, RTT);
+    } else {
+      stoptimer(A);
     }
   }
 
@@ -236,7 +238,7 @@ void B_input(struct pkt packet)
     packet_return.acknum = packet.seqnum;
 
     for (i = 0; i < 20; i++) {
-      packet_return.payload[i] = 'A';
+      packet_return.payload[i] = '0';
     }
     packet_return.checksum = ComputeChecksum(packet_return);
 
