@@ -105,9 +105,12 @@ void A_output(struct msg message)
 
 /* check if sequence number is within window */
 bool is_within_window(int seqnum, int start, int end) {
+  /* Both cases of being fully within window or wrapping around */
   if (start <= end) {
+      /* If fully within window, check if between both */
       return seqnum >= start && seqnum < end;
   } else {
+      /* If window is looping around, check if it is in either end of the window between the start and end */
       return seqnum >= start || seqnum < end;
   }
 }
@@ -129,10 +132,12 @@ void A_input(struct pkt packet)
     printf("----A: uncorrupted ACK %d is received\n",packet.acknum);
   }
 
+  /* Check if ACK is in window */
   if (!is_within_window(packet.acknum, windowfirst, A_nextseqnum)) {
     return;
   }
 
+  /* Check if ACK is already received and is duplicate */
   if (isAcked[packet.acknum]) {
     if (TRACE > 0) {
       printf("----A: duplicate ACK %d, do nothing!\n", packet.acknum);
@@ -150,7 +155,7 @@ void A_input(struct pkt packet)
 
   if (packet.acknum == windowfirst) {
     stoptimer(A);
-
+    /* Go to next unacked packet */
     while (windowfirst != A_nextseqnum && isAcked[windowfirst]) {
       isAcked[windowfirst] = false;
       windowfirst = (windowfirst + 1) % SEQSPACE;
@@ -220,6 +225,7 @@ void B_input(struct pkt packet)
   int prevLeft = (buffer_B_start + SEQSPACE - WINDOWSIZE) % SEQSPACE;
   int prevRight = buffer_B_start;
 
+  /* Check if packet is corrupted */
   if (IsCorrupted(packet)) {
     return;
   }
@@ -228,6 +234,7 @@ void B_input(struct pkt packet)
     printf("----B: packet %d is correctly received, send ACK!\n",packet.seqnum);
   packets_received++;
 
+  /* Check if packet is in current window */
   currWindow = is_within_window(packet.seqnum, left, right);
 
   if (currWindow) {
@@ -235,6 +242,7 @@ void B_input(struct pkt packet)
     packet_return.seqnum = NOTINUSE;
     packet_return.acknum = packet.seqnum;
 
+    /* Fill with blank data and compute checksum */
     for (i = 0; i < 20; i++) {
       packet_return.payload[i] = '0';
     }
@@ -248,18 +256,18 @@ void B_input(struct pkt packet)
       buffer_B_side[packet.seqnum] = packet;
     }
 
+    /* Slide window forward */
     while (buffer_B_side[buffer_B_start].seqnum != NOTINUSE) {
       tolayer5(B, buffer_B_side[buffer_B_start].payload);
       buffer_B_side[buffer_B_start].seqnum = NOTINUSE;
-  
-      /* Slide the window forward */
       buffer_B_start = (buffer_B_start + 1) % SEQSPACE;
   }
     return;
   }
 
+  /* Prev window is checked as per course reading to check if ACK must be generated */
   prevWindow = is_within_window(packet.seqnum, prevLeft, prevRight);
-
+  
   if (prevWindow) {
     struct pkt prev_buffer_pkt;
     prev_buffer_pkt.seqnum = NOTINUSE;
@@ -270,6 +278,7 @@ void B_input(struct pkt packet)
     prev_buffer_pkt.checksum = ComputeChecksum(prev_buffer_pkt);
     tolayer3(B, prev_buffer_pkt);
   }
+  /* Ignore packet otherwise if not in previous either */
 }
 /* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
