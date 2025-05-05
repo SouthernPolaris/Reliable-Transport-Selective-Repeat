@@ -139,7 +139,7 @@ void A_input(struct pkt packet)
     }
     return;
   }
-  
+
   new_ACKs++;
 
   isAcked[packet.acknum] = true;
@@ -167,7 +167,6 @@ void A_timerinterrupt(void)
   if (TRACE > 0)
     printf("----A: time out,resend packets!\n");
 
-  /* resend packet */
   struct pkt send_pkt = buffer[windowfirst];
   /* Singular packet sending only instead of GBN's for loop as sends packets individually instead of all after */
   tolayer3(A, send_pkt);
@@ -183,7 +182,7 @@ void A_init(void)
 {
   int i;
   /* initialise A's window, buffer and sequence number */
-  A_nextseqnum = 0;  /* A starts with seq num 0, do not change this */
+  A_nextseqnum = 0; 
   windowfirst = 0;
 
   for (i = 0; i < SEQSPACE; i++) {
@@ -206,54 +205,92 @@ void B_input(struct pkt packet)
   struct pkt sendpkt;
   int i;
 
-  /* if not corrupted and received packet is in order */
-  if  ( (!IsCorrupted(packet))  && (packet.seqnum == expectedseqnum) ) {
-    if (TRACE > 0)
-      printf("----B: packet %d is correctly received, send ACK!\n",packet.seqnum);
-    packets_received++;
+  bool currWindow = false;
+  int left = buffer_B_start;
+  int right = (buffer_B_start + WINDOWSIZE) % SEQSPACE;
 
-    /* deliver to receiving application */
-    tolayer5(B, packet.payload);
+  bool prevWindow = false;
+  int prevLeft = (buffer_B_start + SEQSPACE - WINDOWSIZE) % SEQSPACE;
+  int prevRight = buffer_B_start;
 
-    /* send an ACK for the received packet */
-    sendpkt.acknum = expectedseqnum;
-
-    /* update state variables */
-    expectedseqnum = (expectedseqnum + 1) % SEQSPACE;        
-  }
-  else {
-    /* packet is corrupted or out of order resend last ACK */
-    if (TRACE > 0) 
-      printf("----B: packet corrupted or not expected sequence number, resend ACK!\n");
-    if (expectedseqnum == 0)
-      sendpkt.acknum = SEQSPACE - 1;
-    else
-      sendpkt.acknum = expectedseqnum - 1;
+  if (IsCorrupted(packet)) {
+    return;
   }
 
-  /* create packet */
-  sendpkt.seqnum = B_nextseqnum;
-  B_nextseqnum = (B_nextseqnum + 1) % 2;
-    
-  /* we don't have any data to send.  fill payload with 0's */
-  for ( i=0; i<20 ; i++ ) 
-    sendpkt.payload[i] = '0';  
+  if (TRACE > 0)
+    printf("----B: packet %d is correctly received, send ACK!\n",packet.seqnum);
+  packets_received++;
 
-  /* computer checksum */
-  sendpkt.checksum = ComputeChecksum(sendpkt); 
+  currWindow = is_within_window(packet.seqnum, left, right);
 
-  /* send out packet */
-  tolayer3 (B, sendpkt);
+  if (currWindow) {
+    struct pkt packet_return;
+    packet_return.seqnum = NOTINUSE;
+    packet_return.acknum = packet.seqnum;
+
+    /* Fill payload with 0s */
+    for (i = 0; i < 20; i++) {
+      packet_return.payload[i] = '0';
+    }
+    packet_return.checksum = ComputeChecksum(packet_return);
+
+    tolayer3(B, packet_return);
+
+    struct pkt buffer_pkt = buffer_B_side[packet.seqnum];
+
+    if (buffer_pkt.seqnum == NOTINUSE) {
+      buffer_B_side[packet.seqnum] = packet;
+    }
+
+    struct pkt temp_pkt = buffer_B_side[buffer_B_start];
+
+    while (temp_pkt.seqnum != NOTINUSE) {
+      tolayer5(B, temp_pkt.payload);
+      buffer_B_side[buffer_B_start].seqnum = NOTINUSE;
+  
+      /* Slide the window forward */
+      buffer_B_start = (buffer_B_start + 1) % SEQSPACE;
+      temp_pkt = buffer_B_side[buffer_B_start];
+    }
+    return;
+  }
+
+
+  /* Check if the packet is in the previous window as per the course reading and send if so */
+  prevWindow = is_within_window(packet.seqnum, prevLeft, prevRight);
+
+  if (prevWindow) {
+    struct pkt prev_buffer_pkt;
+    prev_buffer_pkt.seqnum = NOTINUSE;
+    prev_buffer_pkt.acknum = packet.seqnum;
+    for (i = 0; i < 20; i++) {
+      prev_buffer_pkt.payload[i] = 'A';
+    }
+    prev_buffer_pkt.checksum = ComputeChecksum(prev_buffer_pkt);
+    tolayer3(B, prev_buffer_pkt);
+  }
 }
 
 /* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 void B_init(void)
 {
+  int seq_item;
+  int idx;
   expectedseqnum = 0;
   B_nextseqnum = 1;
-}
 
+  buffer_B_start = 0;
+
+  for (seq_item = 0; seq_item < SEQSPACE; seq_item++) {
+    buffer_B_side[seq_item].acknum = NOTINUSE;
+    buffer_B_side[seq_item].seqnum = NOTINUSE;
+    /* fill the buffer with 0's */
+    for (idx = 0; idx < 20; idx++) {
+      buffer_B_side[seq_item].payload[idx] = '0';
+    }
+  }
+}
 /******************************************************************************
  * The following functions need be completed only for bi-directional messages *
  *****************************************************************************/
