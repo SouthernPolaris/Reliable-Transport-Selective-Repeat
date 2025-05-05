@@ -24,7 +24,7 @@
 
 #define RTT  16.0       /* round trip time.  MUST BE SET TO 16.0 when submitting assignment */
 #define WINDOWSIZE 6    /* the maximum number of buffered unacked packet */
-#define SEQSPACE 7      /* the min sequence space for GBN must be at least windowsize + 1 */
+#define SEQSPACE 16      /* the min sequence space for Selective Repeat must be at least windowsize * 2 */
 #define NOTINUSE (-1)   /* used to fill header fields that are not being used */
 #define WINDOWFULLBUFFERSIZE 100
 
@@ -57,14 +57,11 @@ bool IsCorrupted(struct pkt packet)
 
 /********* Sender (A) variables and functions ************/
 
-static struct pkt buffer[WINDOWSIZE];  /* array for storing packets waiting for ACK */
-static int windowfirst, windowlast;    /* array indexes of the first/last packet awaiting ACK */
-static int windowcount;                /* the number of packets currently awaiting an ACK */
+/* Buffer needs to be of len SEQSPACE for proper implementation */
+static struct pkt buffer[SEQSPACE];  /* array for storing packets waiting for ACK */
+static int windowfirst;            /* the number of packets currently awaiting an ACK */
 static int A_nextseqnum;               /* the next sequence number to be used by the sender */
-static bool isAcked[WINDOWSIZE];
-static struct msg window_full_buffer[WINDOWFULLBUFFERSIZE];
-static int bufferfirst, bufferlast;
-static int buffercount;
+static bool isAcked[SEQSPACE];
 
 /* called from layer 5 (application layer), passed the message to be sent to other side */
 void A_output(struct msg message)
@@ -86,7 +83,6 @@ void A_output(struct msg message)
 
     /* put packet in window buffer */
     buffer[A_nextseqnum % SEQSPACE] = sendpkt;
-    windowcount++;
     if (TRACE > 0)
       printf("Sending packet %d to layer 3\n", sendpkt.seqnum);
     /* send out packet */
@@ -107,6 +103,15 @@ void A_output(struct msg message)
   }
 }
 
+/* check if sequence number is within window */
+bool is_within_window(int seqnum, int start, int end) {
+  if (start <= end) {
+      return seqnum >= start && seqnum < end;
+  } else {
+      return seqnum >= start || seqnum < end;
+  }
+}
+
 /* called from layer 3, when a packet arrives for layer 4 
    In this practical this will always be an ACK as B never sends data.
 */
@@ -115,62 +120,58 @@ void A_input(struct pkt packet)
   int ackcount = 0;
   int i;
 
-  /* if received ACK is not corrupted */ 
-  if (!IsCorrupted(packet)) {
+  if (IsCorrupted(packet)) {
     if (TRACE > 0) {
-      printf("----A: uncorrupted ACK %d is received\n",packet.acknum);
+      printf("----A: corrupted ACK is received, do nothing!\n");
     }
-    total_ACKs_received++;
-
-    /* check if new ACK or duplicate */
-    if (!((packet.acknum < windowfirst) && (packet.acknum > A_nextseqnum))) {
-      return;
-    }
-
-    /* check if duplicate ack */
-    if (isAcked[packet.acknum]) {
-      if (TRACE > 0) {
-        printf("----A: duplicate ACK %d, do nothing!\n", packet.acknum);
-      }
-      return;
-    }
-
-    isAcked[packet.acknum] = true;
-    ackcount++;
-
-    /* if first packet */
-    if (packet.acknum == windowfirst) {
-      /* Stop timer */
-      /* Keep track of timer for first unacked as per workshop */
-      stoptimer(A);
-
-      /* find next unacked*/
-      while (windowfirst != A_nextseqnum && isAcked[windowfirst]) {
-        windowfirst = (windowfirst + 1) % SEQSPACE;
-      }
-
-      if (windowfirst != A_nextseqnum) {
-        starttimer(A, RTT);
-      }
-    }
-
+    return;
   }
-  else 
-    if (TRACE > 0)
-      printf ("----A: corrupted ACK is received, do nothing!\n");
+
+  total_ACKs_received += 1;
+
+  if (!is_within_window(packet.acknum, windowfirst, A_nextseqnum)) {
+    return;
+  }
+
+  if (isAcked[packet.acknum]) {
+    if (TRACE > 0) {
+      printf("----A: duplicate ACK %d, do nothing!\n", packet.acknum);
+    }
+    return;
+  }
+  
+  new_ACKs++;
+
+  isAcked[packet.acknum] = true;
+
+  if (packet.acknum == windowfirst) {
+    stoptimer(A);
+
+    while (windowfirst != A_nextseqnum && isAcked[windowfirst] == true) {
+      isAcked[windowfirst] = false;
+      windowfirst = (windowfirst + 1) % SEQSPACE;
+    }
+
+    if (windowfirst != A_nextseqnum) {
+      starttimer(A, RTT);
+    } else {
+      stoptimer(A);
+    }
+  }
+
 }
 
 /* called when A's timer goes off */
 void A_timerinterrupt(void)
 {
-  int i;
-
   if (TRACE > 0)
     printf("----A: time out,resend packets!\n");
 
   /* resend packet */
+  struct pkt send_pkt = buffer[windowfirst];
   /* Singular packet sending only instead of GBN's for loop as sends packets individually instead of all after */
-  tolayer3(A, buffer[windowfirst]);
+  tolayer3(A, send_pkt);
+  packets_resent++;
   starttimer(A, RTT);
 }       
 
@@ -184,17 +185,8 @@ void A_init(void)
   /* initialise A's window, buffer and sequence number */
   A_nextseqnum = 0;  /* A starts with seq num 0, do not change this */
   windowfirst = 0;
-  windowlast = -1;   /* windowlast is where the last packet sent is stored.  
-		     new packets are placed in winlast + 1 
-		     so initially this is set to -1
-		   */
-  windowcount = 0;
 
-  bufferfirst = 0;
-  bufferlast = -1;
-  buffercount = 0;
-
-  for (i = 0; i < WINDOWSIZE; i++) {
+  for (i = 0; i < SEQSPACE; i++) {
     isAcked[i] = false;
   }
 }
@@ -205,7 +197,8 @@ void A_init(void)
 
 static int expectedseqnum; /* the sequence number expected next by the receiver */
 static int B_nextseqnum;   /* the sequence number for the next packets sent by B */
-
+static struct pkt buffer_B_side[SEQSPACE];
+static int buffer_B_start;
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 void B_input(struct pkt packet)
